@@ -1,14 +1,18 @@
 
-
 try:
     from urlparse import urlparse, urlunparse, parse_qsl
     from urllib import urlencode
 except ImportError:
     from urllib.parse import urlparse, urlunparse, parse_qsl, urlencode
 
+try:
+    from types import StringTypes
+except ImportError:
+    StringTypes = (str,)
+
 import posixpath
 
-
+path = posixpath # useful alias for users of the module.
 
 def _merge_values(value0, value1):
     if value0 and value1 and value0 != value1:
@@ -19,6 +23,21 @@ def resolve_path(base_url, path):
     parts = list(urlparse(base_url))
     parts[2] = posixpath.join(parts[2], path) # parts[2] is URL path
     return urlunparse(parts)
+
+def override(url, scheme=None, username=None, password=None, hostname=None, port=None, path=None, params=None, query=None, fragment=None):
+    parts = urlparse(url)
+    
+    return _generate_url(
+        scheme or parts.scheme,
+        username or parts.username,
+        password or parts.password,
+        hostname or parts.hostname,
+        port or parts.port,
+        path or parts.path, 
+        params or parts.params,
+        query or parts.query,
+        fragment or parts.fragment
+    )
 
 def merge(url0, url1):
     parts0 = urlparse(url0)
@@ -35,7 +54,10 @@ def merge(url0, url1):
     query = urlencode(parse_qsl(parts0.query, True) + parse_qsl(parts1.query, True))
     fragment = parts0.fragment or parts1.fragment
     
-    # Compute new "netloc".
+    return _generate_url(scheme, username, password, hostname, port, path, params, query, fragment)
+    
+def _generate_url(scheme=None, username=None, password=None, hostname=None, port=None, path=None, params=None, query=None, fragment=None):
+    # Compute "netloc".
     netloc = ''
     if username:
         netloc += username
@@ -46,7 +68,8 @@ def merge(url0, url1):
     if port and port > 0:
         netloc += ':' + str(port)
     
+    # If query is not a string, convert it.
+    if not isinstance(query, StringTypes):
+        query = urlencode(query)
+    
     return urlunparse((scheme, netloc, path, params, query, fragment))
-    
-    
-    

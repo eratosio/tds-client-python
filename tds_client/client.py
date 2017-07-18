@@ -58,15 +58,26 @@ class Dataset(object):
     pass
 
 class Client(object):
-    def __init__(self, url=None, session=None):
-        self.url = url
+    def __init__(self, url, session=None):
         self.session = session or requests.Session()
         
-        self._services = self._datasets = None
+        # Examine supplied URL to determine TDS application's context path. If
+        # the given URL points to the catalog, use the portion before catalog
+        # file name. Otherwise, use the complete URL path.
+        parts = urls.urlparse(url)
+        context_path = parts.path
+        head, tail = urls.path.split(context_path)
+        if tail.lower() == 'catalog.xml':
+            context_path = head
+        
+        # The catalog path is always 'catalog.xml' appended to the context path.
+        catalog_path = urls.path.join(context_path, 'catalog.xml')
+        
+        self._context_url = urls.override(url, path=context_path)
+        self._catalog_url = urls.override(url, path=catalog_path)
     
     def get_dataset(self, url):
-        url = services.OPENDAP.resolve_url(self.url, url)
-        print url
+        url = services.OPENDAP.resolve_url(self._context_url, url)
         
         # Obtain dataset and monkey-patch to add a dummy delete() method (for
         # consistency).
@@ -76,7 +87,7 @@ class Client(object):
         return dataset
     
     def get_subset(self, url, **kwargs):
-        url = services.NETCDF_SUBSET_SERVICE.resolve_url(self.url, url)
+        url = services.NETCDF_SUBSET_SERVICE.resolve_url(self._context_url, url)
         
         # Ignore parameters set to None.
         params = { k:v for k,v in kwargs.iteritems() if v is not None }
@@ -117,12 +128,10 @@ class Client(object):
         
         return dataset
     
-    def _get_catalog(self, force=False):
-        # TODO: if read previously, determine if re-read required.
-        
-        # Retrieve root catalog.
-        catalog_url = urls.resolve_path(self.url, 'catalog.xml')
-        response = session.get(catalog_url)
-        response.raise_for_status()
-        
-        # Parse the catalog.
+    @property
+    def context_url(self):
+        return self._context_url
+    
+    @property
+    def catalog_url(self):
+        return self._catalog_url
