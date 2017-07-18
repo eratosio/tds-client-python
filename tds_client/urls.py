@@ -19,6 +19,9 @@ def _merge_values(value0, value1):
         raise ValueError() # TODO: more useful error
     return value0 or value1
 
+def same_resource(url0, url1):
+    return urlparse(url0)[0:3] == urlparse(url1)[0:3] # XXX: should 3 instead be 4?
+
 def resolve_path(base_url, path):
     parts = list(urlparse(base_url))
     parts[2] = posixpath.join(parts[2], path) # parts[2] is URL path

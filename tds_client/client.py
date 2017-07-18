@@ -54,30 +54,29 @@ def _check_exclusive_params(params, param_set_1, param_set_2):
     if param_set_1.intersection(params.keys()) and param_set_2.intersection(params.keys()):
         raise ValueError('The parameter sets {} and {} are mutually exclusive.'.format(', '.join(param_set_1), ', '.join(param_set_2)))
 
-class Dataset(object):
-    pass
+def resolve_urls(url):
+    # Examine supplied URL to determine TDS application's context path. If the
+    # given URL points to the catalog, use the portion before catalog file name.
+    # Otherwise, use the complete URL path.
+    parts = urls.urlparse(url)
+    context_path = parts.path
+    head, tail = urls.path.split(context_path)
+    if tail.lower() == 'catalog.xml':
+        context_path = head
+    
+    # The catalog path is always 'catalog.xml' appended to the context path.
+    catalog_path = urls.path.join(context_path, 'catalog.xml')
+    
+    return urls.override(url, path=context_path), urls.override(url, path=catalog_path)
 
 class Client(object):
     def __init__(self, url, session=None):
         self.session = session or requests.Session()
         
-        # Examine supplied URL to determine TDS application's context path. If
-        # the given URL points to the catalog, use the portion before catalog
-        # file name. Otherwise, use the complete URL path.
-        parts = urls.urlparse(url)
-        context_path = parts.path
-        head, tail = urls.path.split(context_path)
-        if tail.lower() == 'catalog.xml':
-            context_path = head
-        
-        # The catalog path is always 'catalog.xml' appended to the context path.
-        catalog_path = urls.path.join(context_path, 'catalog.xml')
-        
-        self._context_url = urls.override(url, path=context_path)
-        self._catalog_url = urls.override(url, path=catalog_path)
+        self._context_url, self._catalog_url = resolve_urls(url)
     
     def get_dataset(self, url):
-        url = services.OPENDAP.resolve_url(self._context_url, url)
+        url = self._resolve_url(services.OPENDAP, url)
         
         # Obtain dataset and monkey-patch to add a dummy delete() method (for
         # consistency).
@@ -87,7 +86,7 @@ class Client(object):
         return dataset
     
     def get_subset(self, url, **kwargs):
-        url = services.NETCDF_SUBSET_SERVICE.resolve_url(self._context_url, url)
+        url = self._resolve_url(services.NETCDF_SUBSET_SERVICE, url)
         
         # Ignore parameters set to None.
         params = { k:v for k,v in kwargs.iteritems() if v is not None }
@@ -135,3 +134,18 @@ class Client(object):
     @property
     def catalog_url(self):
         return self._catalog_url
+    
+    def _resolve_url(self, service, url):
+        url = service.resolve_url(self._context_url, url)
+        
+        # The URL *must* point to the same Thredds instance - if not, we're
+        # potentially leaking sensitive information (e.g. credentials) to the
+        # wrong server.
+        url_parts = urls.urlparse(url)
+        context_parts = urls.urlparse(self._context_url)
+        url_path = urls.path.normpath(url_parts.path)
+        context_path = urls.path.normpath(context_parts.path)
+        if url_parts[0:2] != context_parts[0:2] or not url_path.startswith(context_path):
+            raise RuntimeError('Cannot access {} service {} using client configured for Thredds server at {}.'.format(service.name, url, self._context_url))
+        
+        return url

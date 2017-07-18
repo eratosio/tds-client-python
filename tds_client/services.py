@@ -7,13 +7,15 @@ class Service(object):
         self._description = description
         self._url_path = url_path
     
-    def resolve_url(self, base_url, dataset_url):
-        # If no base URL given, assume dataset URL is fully qualified.
-        if base_url is None:
+    def resolve_url(self, context_url, dataset_url):
+        # If dataset URL is fully qualified (i.e. not just a path and query),
+        # use it as is.
+        parts = urls.urlparse(dataset_url)
+        if parts.scheme or parts.netloc:
             return dataset_url
         
-        # Otherwise, merge service URL and dataset path.
-        service_url = urls.resolve_path(base_url, self._url_path)
+        # Otherwise, merge context URL and dataset path.
+        service_url = urls.resolve_path(context_url, self._url_path)
         return urls.merge(service_url, dataset_url)
             
     @property
