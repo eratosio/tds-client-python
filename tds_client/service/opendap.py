@@ -9,4 +9,6 @@ class OPeNDAPService(StandardService):
     path = 'dodsC'
     
     def get_dataset(self, session=None):
+        session = session or self._session
+        
         return open_url(self.url, session=session)

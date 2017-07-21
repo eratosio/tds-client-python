@@ -42,6 +42,10 @@ class Service(object):
     def client(self):
         return self._dataset.client
     
+    @property
+    def _session(self):
+        return self.client.session
+    
     def _resolve_url(self, service_path):
         # Ensure service path has a trailing path separator but no leading one.
         service_path = urls.path.join(service_path.strip(urls.path.sep), '')

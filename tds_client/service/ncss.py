@@ -43,7 +43,9 @@ class NetCDFSubsetService(StandardService):
     description = ''
     path = 'ncss'
     
-    def get_subset(self, session=requests, **kwargs):
+    def get_subset(self, session=None, **kwargs):
+        session = session or self._session
+        
         # Ignore parameters set to None.
         params = { k:v for k,v in kwargs.iteritems() if v is not None }
         
