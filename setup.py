@@ -22,10 +22,16 @@ setup(
     packages = find_packages(),
     long_description = read('readme.md'),
     install_requires = [
-        'requests >= 2.11.1',
+        'requests',
         'pydap',
-        'netCDF4 >= 1.2.9'
+        'netCDF4'
     ],
+    entry_points = {
+        'tds_client.service': [
+            'opendap = tds_client.service.opendap:OPeNDAPService',
+            'ncss = tds_client.service.ncss:NetCDFSubsetService'
+        ]
+    },
     classifiers = [
         'Development Status :: 3 - Alpha',
         'Topic :: Scientific/Engineering :: Information Analysis',

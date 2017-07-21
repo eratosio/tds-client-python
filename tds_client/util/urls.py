@@ -20,7 +20,14 @@ def _merge_values(value0, value1):
     return value0 or value1
 
 def same_resource(url0, url1):
-    return urlparse(url0)[0:3] == urlparse(url1)[0:3] # XXX: should 3 instead be 4?
+    # Scheme and netloc must match.
+    parts0 = urlparse(url0)
+    parts1 = urlparse(url1)
+    if parts0[0:2] != parts1[0:2]:
+        return False
+    
+    # Normalised paths must match.
+    return posixpath.normpath(parts0.path) == posixpath.normpath(parts1.path)
 
 def resolve_path(base_url, path):
     parts = list(urlparse(base_url))
