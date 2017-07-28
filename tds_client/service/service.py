@@ -14,25 +14,30 @@ def get_service_classes(refresh=False):
     return _service_classes
 
 def split_service_url(url):
-    result = []
+    # Give each service class a chance to split the URL.
+    results = []
     for service_class in get_service_classes().itervalues():
         try:
-            result.append((service_class.name, service_class.split_url(url)))
+            results.append((service_class.name, service_class.split_url(url)))
         except (NotImplementedError, ValueError):
             pass
     
-    if not result:
+    # Filter out any failed results.
+    results = [(n, p) for n,p in results if p is not None]
+    
+    # Validate results.
+    if not results:
         raise ValueError('Service URL "{}" does not correspond to a known service.'.format(url))
-    elif len(result) > 1:
-        services = ', '.join(name for name,_ in result)
+    elif len(results) > 1:
+        services = ', '.join(name for name,_ in results)
         raise ValueError('Service URL "{}" matches multiple services: {}'.format(url, services))
     
-    _, urls = result[0]
+    _, urls = results[0]
     return urls
 
 class Service(object):
     def __init__(self, dataset):
-        self._dataset = dataset
+        self.__dataset = dataset
     
     @classmethod
     def split_url(cls, url):
@@ -45,6 +50,10 @@ class Service(object):
     @property
     def _session(self):
         return self.client.session
+    
+    @property
+    def _dataset(self):
+        return self.__dataset
     
     def _resolve_url(self, service_path):
         # Ensure service path has a trailing path separator but no leading one.
