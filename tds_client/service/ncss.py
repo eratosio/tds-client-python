@@ -82,7 +82,8 @@ def get_subset(url, session=requests, **kwargs):
     
     # Create dataset and monkey-patch to add a delete() method.
     dataset = NetCDFHandler(path).dataset
-    dataset.delete = types.MethodType(lambda instance: NetCDFSubsetService._safe_rm(path), dataset)
+    dataset.filepath = path
+    dataset.delete = types.MethodType(lambda instance: _safe_rm(instance.path), dataset)
     
     return dataset
 
