@@ -44,9 +44,22 @@ class NetCDFSubsetService(StandardService):
     path = 'ncss'
     
     def get_subset(self, session=None, **kwargs):
-        return get_subset(self.url, (session or self._session), **kwargs)
+        fd, path = tempfile.mkstemp(prefix='ncss_', suffix='.nc')
+        
+        _download_subset(self.url, (session or self._session), fd, **kwargs)
+        
+        # Create dataset and monkey-patch to add a delete() method.
+        dataset = NetCDFHandler(path).dataset
+        dataset.filepath = path
+        dataset.delete = types.MethodType(lambda instance: _safe_rm(instance.path), dataset)
+        
+        return dataset
     
-def get_subset(url, session=requests, **kwargs):
+    def download_subset(self, path, session=None, **kwargs):
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC)
+        _download_subset(self.url, (session or self._session), fd, **kwargs)
+    
+def _download_subset(url, session, fd, **kwargs):
     # Ignore parameters set to None.
     params = { k:v for k,v in kwargs.iteritems() if v is not None }
     
@@ -76,16 +89,8 @@ def get_subset(url, session=requests, **kwargs):
     params['accept'] = 'netCDF'
     response = session.get(url, params=params, stream=True)
     response.raise_for_status()
-    fd, path = tempfile.mkstemp(prefix='ncss_', suffix='.nc')
     with os.fdopen(fd, 'wb') as f:
         shutil.copyfileobj(response.raw, f)
-    
-    # Create dataset and monkey-patch to add a delete() method.
-    dataset = NetCDFHandler(path).dataset
-    dataset.filepath = path
-    dataset.delete = types.MethodType(lambda instance: _safe_rm(instance.path), dataset)
-    
-    return dataset
 
 def _check_dependent_params(params, param_set):
     present = param_set.intersection(params.keys())
