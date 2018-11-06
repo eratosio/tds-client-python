@@ -13,6 +13,12 @@ class Dataset(CatalogEntity):
         
         self._service_ids = set()
     
+    def __getattr__(self, attr):
+        try:
+            return self.services[attr]
+        except KeyError:
+            raise AttributeError()
+    
     def __str__(self):
         return 'Dataset(id="{}", name="{}")'.format(self.id, self.name)
     
@@ -37,7 +43,10 @@ class Dataset(CatalogEntity):
         for service_type, service_class in get_service_classes(force_reload).iteritems():
             try:
                 service_base = service_bases[service_type.lower()]
-                services[service_type] = service_class(self, service_base)
+                
+                services[service_type] = service_instance = service_class(self, service_base)
+                for alias in getattr(service_class, 'aliases', []):
+                    services[alias] = service_instance
             except KeyError:
                 pass
         

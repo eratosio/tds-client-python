@@ -47,6 +47,7 @@ _VALID_ACCEPT_VALUES = (
 class NetCDFSubsetService(StandardService):
     service_type = 'NetcdfSubset'
     name = 'NetCDF Subset Service'
+    aliases = ['ncss']
     
     def get_subset(self, session=None, accept='netCDF', **kwargs):
         accept = str(accept).lower()
