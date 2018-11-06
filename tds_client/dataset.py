@@ -1,5 +1,6 @@
 
 from tds_client.catalog import CatalogEntity
+from tds_client.service import get_service_classes
 
 class Dataset(CatalogEntity):
     def __init__(self, catalog, url):
@@ -10,11 +11,9 @@ class Dataset(CatalogEntity):
         self._parent = None
         self._xml = None
         
-        self._service_ids = []
-        self._services = {}
+        self._service_ids = set()
     
     def __str__(self):
-        print self._get_xml(False).attrib
         return 'Dataset(id="{}", name="{}")'.format(self.id, self.name)
     
     def get_id(self, force_reload=False):
@@ -30,20 +29,27 @@ class Dataset(CatalogEntity):
         self._reference_catalog._resolve_dataset(self, force_reload)
         return self._catalog
     
-    def get_service(self, service_id, force_reload=True):
-        if not force_reload and service_id in self._services:
-            return self._services[service_id]
-    
+    def get_services(self, force_reload=True):
         catalog = self.get_catalog(force_reload)
+        service_bases = catalog._resolve_services(self._service_ids)
         
-        # Locate service from catalog.
+        services = {}
+        for service_type, service_class in get_service_classes(force_reload).iteritems():
+            try:
+                service_base = service_bases[service_type.lower()]
+                services[service_type] = service_class(self, service_base)
+            except KeyError:
+                pass
         
-        # If service located and compatible service class available, instantiate
-        # it.
+        return services
     
     @property
     def url(self):
         return self._url
+    
+    @property
+    def client(self):
+        return self._reference_catalog.client
     
     @property
     def id(self):
@@ -60,6 +66,10 @@ class Dataset(CatalogEntity):
     @property
     def catalog(self):
         return self.get_catalog()
+    
+    @property
+    def services(self):
+        return self.get_services()
     
     def _get_xml(self, force_reload):
         self._reference_catalog._resolve_dataset(self, force_reload)

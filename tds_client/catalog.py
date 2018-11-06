@@ -7,17 +7,32 @@ from xml.etree import cElementTree as ElementTree
 CATALOG_REF_TAG = '{' + namespaces.CATALOG + '}catalogRef'
 DATASET_TAG = '{' + namespaces.CATALOG + '}dataset'
 METADATA_TAG = '{' + namespaces.CATALOG + '}metadata'
+SERVICE_TAG = '{' + namespaces.CATALOG + '}service'
 SERVICE_NAME_TAG = '{' + namespaces.CATALOG + '}serviceName'
 XLINK_HREF_ATTR = '{' + namespaces.XLINK + '}href'
 
 class CatalogEntity(object):
     def _get_attribute(self, attr, force_reload=False, namespace=namespaces.CATALOG, default=None):
-        xml = self._get_xml(force_reload)
+        return namespaces.get_attr(self._get_xml(force_reload), attr, namespace, default)
+
+def _resolve_services(xml, service_ids, base_url, include_all=False):
+    services = {}
+    
+    for service_xml in xml.iterfind(SERVICE_TAG):
+        name = namespaces.get_attr(service_xml, 'name', namespaces.CATALOG)
+        type_ = namespaces.get_attr(service_xml, 'serviceType', namespaces.CATALOG).lower()
+        base = namespaces.get_attr(service_xml, 'base', namespaces.CATALOG)
         
-        try:
-            return xml.attrib['{' + namespace + '}' + attr]
-        except KeyError:
-            return xml.attrib.get(attr, default)
+        # TODO: update following to properly conform to https://www.unidata.ucar.edu/software/thredds/v4.6/tds/catalog/InvCatalogSpec.html#constructingURLs
+        service_url = base if urls.classify_url(base) == urls.ABSOLUTE_URL else urls.resolve_path(base_url, base)
+        
+        match = name in service_ids
+        if type_ == 'compound':
+            services.update(_resolve_services(service_xml, service_ids, service_url, include_all or match))
+        elif match or include_all:
+            services[type_] = service_url
+    
+    return services
 
 class Catalog(CatalogEntity):
     def __init__(self, url, client):
@@ -40,6 +55,10 @@ class Catalog(CatalogEntity):
     
     def get_version(self, force_reload=False):
         return self._get_attribute('version', force_reload)
+    
+    @property
+    def client(self):
+        return self._client
     
     @property
     def url(self):
@@ -70,6 +89,9 @@ class Catalog(CatalogEntity):
                     return True
         
         return False
+    
+    def _resolve_services(self, service_ids):
+        return _resolve_services(self._get_xml(), service_ids, self.url)
     
     def _get_xml(self, force_reload=False):
         if (self._xml is None) or force_reload:
@@ -104,7 +126,5 @@ class Catalog(CatalogEntity):
         # Determine service names from metadata.
         dataset._service_ids = service_names = set()
         for ancestor_xml in ancestors_xml:
-            print ancestor_xml
             for service_name_xml in ancestor_xml.iterfind(METADATA_TAG + "[@inherited='true']/" + SERVICE_NAME_TAG):
-                print service_name_xml
                 service_names.add(''.join(service_name_xml.itertext()))

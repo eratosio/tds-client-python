@@ -1,5 +1,5 @@
 
-from .service import StandardService
+from tds_client.service import StandardService
 
 import os, requests, shutil, tempfile, types
 
@@ -45,9 +45,8 @@ _VALID_ACCEPT_VALUES = (
 )
 
 class NetCDFSubsetService(StandardService):
+    service_type = 'NetcdfSubset'
     name = 'NetCDF Subset Service'
-    description = ''
-    path = 'ncss'
     
     def get_subset(self, session=None, accept='netCDF', **kwargs):
         accept = str(accept).lower()
