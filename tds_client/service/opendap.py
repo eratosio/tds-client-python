@@ -1,5 +1,5 @@
 
-from .service import StandardService
+from tds_client.service import StandardService
 
 from pydap.client import open_url as get_dataset
 
