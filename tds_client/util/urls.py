@@ -14,6 +14,21 @@ import posixpath
 
 path = posixpath # useful alias for users of the module.
 
+# Different URL types.
+ABSOLUTE_URL = 'absolute_url'   # Fully resolvable URL (i.e. including scheme and netloc).
+ABSOLUTE_PATH = 'absolute_path' # Non-resolvable URL with absolute path (i.e. path starts with a slash).
+RELATIVE_PATH = 'relative_path' # Non-resolvable URL with relative path (i.e. path does not start with a slash).
+
+def classify_url(url):
+    parts = urlparse(url)
+    
+    if parts.scheme and parts.netloc:
+        return ABSOLUTE_URL
+    elif parts.path and parts.path[0] == path.sep:
+        return ABSOLUTE_PATH
+    else:
+        return RELATIVE_PATH
+
 def _merge_values(value0, value1):
     if value0 and value1 and value0 != value1:
         raise ValueError() # TODO: more useful error
@@ -65,7 +80,7 @@ def merge(url0, url1):
     fragment = parts0.fragment or parts1.fragment
     
     return _generate_url(scheme, username, password, hostname, port, path, params, query, fragment)
-    
+
 def _generate_url(scheme=None, username=None, password=None, hostname=None, port=None, path=None, params=None, query=None, fragment=None):
     # Compute "netloc".
     netloc = ''
