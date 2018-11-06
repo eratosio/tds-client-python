@@ -7,7 +7,10 @@ class Dataset(CatalogEntity):
         self._url = url
         
         self._catalog = None
+        self._parent = None
         self._xml = None
+        
+        self._service_ids = []
         self._services = {}
     
     def __str__(self):

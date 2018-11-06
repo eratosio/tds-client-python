@@ -6,6 +6,8 @@ from xml.etree import cElementTree as ElementTree
 
 CATALOG_REF_TAG = '{' + namespaces.CATALOG + '}catalogRef'
 DATASET_TAG = '{' + namespaces.CATALOG + '}dataset'
+METADATA_TAG = '{' + namespaces.CATALOG + '}metadata'
+SERVICE_NAME_TAG = '{' + namespaces.CATALOG + '}serviceName'
 XLINK_HREF_ATTR = '{' + namespaces.XLINK + '}href'
 
 class CatalogEntity(object):
@@ -55,10 +57,7 @@ class Catalog(CatalogEntity):
         self._get_xml(force_reload)
         
         # Try to find the dataset in this catalog.
-        dataset_xml = Catalog._find_dataset_xml(self._xml, dataset.url)
-        if dataset_xml is not None:
-            dataset._catalog = self
-            dataset._xml = dataset_xml
+        if self._find_and_update_dataset(dataset, self._xml):
             return True
         
         # Otherwise, recurse into child catalogs.
@@ -81,18 +80,31 @@ class Catalog(CatalogEntity):
         
         return self._xml
     
-    @staticmethod
-    def _find_dataset_xml(xml, url_path):
+    def _find_and_update_dataset(self, dataset, xml, ancestors=[]):
         # First try to find the dataset as a direct child of the given element.
-        matches = xml.findall(DATASET_TAG + "[@urlPath='" + url_path + "']")
+        matches = xml.findall(DATASET_TAG + "[@urlPath='" + dataset.url + "']")
         if len(matches) == 1:
-            return matches[0]
+            self._update_dataset(dataset, matches[0], ancestors)
+            return True
         elif len(matches) > 1:
             raise ValueError('Illegal catalog: duplicate datasets detected.')
         
         # Failing that, recurse into all child datasets (in case the target
         # dataset is nested).
-        for dataset in xml.iterfind(DATASET_TAG):
-            dataset_xml = Catalog._find_dataset_xml(dataset, url_path)
-            if dataset_xml is not None:
-                return dataset_xml
+        for child_dataset_xml in xml.iterfind(DATASET_TAG):
+            if self._find_and_update_dataset(dataset, child_dataset_xml, ancestors + [child_dataset_xml]):
+                return True
+        
+        return False
+    
+    def _update_dataset(self, dataset, dataset_xml, ancestors_xml):
+        dataset._catalog = self
+        dataset._xml = dataset_xml
+        
+        # Determine service names from metadata.
+        dataset._service_ids = service_names = set()
+        for ancestor_xml in ancestors_xml:
+            print ancestor_xml
+            for service_name_xml in ancestor_xml.iterfind(METADATA_TAG + "[@inherited='true']/" + SERVICE_NAME_TAG):
+                print service_name_xml
+                service_names.add(''.join(service_name_xml.itertext()))
