@@ -8,7 +8,16 @@ CATALOG_REF_TAG = '{' + namespaces.CATALOG + '}catalogRef'
 DATASET_TAG = '{' + namespaces.CATALOG + '}dataset'
 XLINK_HREF_ATTR = '{' + namespaces.XLINK + '}href'
 
-class Catalog(object):
+class CatalogEntity(object):
+    def _get_attribute(self, attr, force_reload=False, namespace=namespaces.CATALOG, default=None):
+        xml = self._get_xml(force_reload)
+        
+        try:
+            return xml.attrib['{' + namespace + '}' + attr]
+        except KeyError:
+            return xml.attrib.get(attr, default)
+
+class Catalog(CatalogEntity):
     def __init__(self, url, client):
         self._url = url
         self._client = client
@@ -18,17 +27,17 @@ class Catalog(object):
     def __str__(self):
         return 'Catalog(url="{}", name="{}")'.format(self.url, self.name)
     
-    def iter_datasets(self, force=False):
-        pass
+    def iter_datasets(self, force_reload=False):
+        pass # TODO
     
-    def iter_catalogs(self, force=False):
-        pass
+    def iter_catalogs(self, force_reload=False):
+        pass # TODO
     
-    def get_name(self, force=False):
-        return self._get_xml(force).attrib.get('name')
+    def get_name(self, force_reload=False):
+        return self._get_attribute('name', force_reload)
     
-    def get_version(self, force=False):
-        return self._get_xml(force).attrib.get('version')
+    def get_version(self, force_reload=False):
+        return self._get_attribute('version', force_reload)
     
     @property
     def url(self):
@@ -42,14 +51,14 @@ class Catalog(object):
     def version(self):
         return self.get_version()
     
-    def _resolve_dataset(self, dataset, force=False):
-        self._get_xml(force)
+    def _resolve_dataset(self, dataset, force_reload=False):
+        self._get_xml(force_reload)
         
         # Try to find the dataset in this catalog.
         dataset_xml = Catalog._find_dataset_xml(self._xml, dataset.url)
         if dataset_xml is not None:
             dataset._catalog = self
-            # TODO: update other properties
+            dataset._xml = dataset_xml
             return True
         
         # Otherwise, recurse into child catalogs.
@@ -58,13 +67,13 @@ class Catalog(object):
             if catalog_url is not None:
                 catalog = Catalog(urls.resolve_path(self.url, catalog_url), self._client)
                 
-                if catalog._resolve_dataset(dataset, force):
+                if catalog._resolve_dataset(dataset, force_reload):
                     return True
         
         return False
     
-    def _get_xml(self, force=False):
-        if (self._xml is None) or force:
+    def _get_xml(self, force_reload=False):
+        if (self._xml is None) or force_reload:
             response = self._client.session.get(self._url)
             response.raise_for_status()
             
