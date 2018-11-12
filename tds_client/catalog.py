@@ -83,7 +83,7 @@ class Catalog(CatalogEntity):
         for catalog_ref_xml in self._xml.iterfind(CATALOG_REF_TAG):
             catalog_url = catalog_ref_xml.attrib.get(XLINK_HREF_ATTR)
             if catalog_url is not None:
-                catalog = Catalog(urls.resolve_path(self.url, catalog_url), self._client)
+                catalog = Catalog(urls.resolve_path(self.url, '../', catalog_url), self._client)
                 
                 if catalog._resolve_dataset(dataset, force_reload):
                     return True

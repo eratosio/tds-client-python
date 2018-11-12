@@ -46,7 +46,7 @@ def same_resource(url0, url1):
 
 def resolve_path(base_url, *args):
     parts = list(urlparse(base_url))
-    parts[2] = posixpath.join(parts[2], *args) # parts[2] is URL path
+    parts[2] = posixpath.normpath(posixpath.join(parts[2], *args)) # parts[2] is URL path
     return urlunparse(parts)
 
 def override(url, scheme=None, username=None, password=None, hostname=None, port=None, path=None, params=None, query=None, fragment=None):

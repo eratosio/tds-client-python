@@ -2,8 +2,16 @@
 from tds_client.catalog import CatalogEntity
 from tds_client.service import get_service_classes
 
+import warnings
+
+class DatasetUrlWarning(UserWarning):
+    pass
+
 class Dataset(CatalogEntity):
     def __init__(self, catalog, url):
+        if url.lower().endswith('.html'):
+            warnings.warn('The provided dataset URL {} ends with ".html". This is almost certainly not intended.'.format(url), DatasetUrlWarning)
+        
         self._reference_catalog = catalog
         self._url = url
         
@@ -32,7 +40,8 @@ class Dataset(CatalogEntity):
         return self._get_attribute('restrictAccess', force_reload)
     
     def get_catalog(self, force_reload=False):
-        self._reference_catalog._resolve_dataset(self, force_reload)
+        if not self._reference_catalog._resolve_dataset(self, force_reload):
+            raise ValueError('Unable to find dataset "{}" in catalog hierarchy at {}.'.format(self.url, self._reference_catalog.url))
         return self._catalog
     
     def get_services(self, force_reload=True):
