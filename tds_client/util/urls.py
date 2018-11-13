@@ -19,6 +19,12 @@ ABSOLUTE_URL = 'absolute_url'   # Fully resolvable URL (i.e. including scheme an
 ABSOLUTE_PATH = 'absolute_path' # Non-resolvable URL with absolute path (i.e. path starts with a slash).
 RELATIVE_PATH = 'relative_path' # Non-resolvable URL with relative path (i.e. path does not start with a slash).
 
+# Rules for merging the various parts of two URLs.
+KEEP = 'keep'           # Always keep the value from the first URL
+DELETE = 'delete'       # Use a default value instead of a value from either URL
+OVERWRITE = 'overwrite' # If the second URL has the given part, it overrides that of the first URL. Otherwise, the default value is used.
+MERGE = 'merge'         # If only one or the other URL has the given part, it is used. If neither do, the default is used. If both do, a part-specific merge algorithm is used (in most cases, the second URL wins)
+
 def classify_url(url):
     parts = urlparse(url)
     
@@ -29,10 +35,26 @@ def classify_url(url):
     else:
         return RELATIVE_PATH
 
-def _merge_values(value0, value1):
-    if value0 and value1 and value0 != value1:
-        raise ValueError() # TODO: more useful error
-    return value0 or value1
+def _default_merger(value0, value1, default):
+    return value1 or value0 or default
+
+def _path_merger(path0, path1, default):
+    return posixpath.normpath(posixpath.join(path0, path1))
+
+def _query_merger(query0, query1, default):
+    query = dict(parse_qsl(parts0.query, True))
+    query.update(parse_qsl(parts1.query, True))
+    return urlencode(query)
+
+def _merge(value0, value1, rule, default, merger=_default_merger):
+    if rule == KEEP:
+        return value0
+    elif rule == DELETE:
+        return default
+    elif rule == OVERWRITE:
+        return value1 or default
+    elif rule == MERGE:
+        return merger(value0, value1, default)
 
 def same_resource(url0, url1):
     # Scheme and netloc must match.
@@ -64,20 +86,21 @@ def override(url, scheme=None, username=None, password=None, hostname=None, port
         fragment or parts.fragment
     )
 
-def merge(url0, url1):
+def merge(url0, url1, scheme=MERGE, username=MERGE, password=MERGE, hostname=MERGE, port=MERGE, path=MERGE, params=MERGE, query=MERGE, fragment=MERGE):
     parts0 = urlparse(url0)
     parts1 = urlparse(url1)
     
     # Merge various parts of the URLs.
-    scheme = _merge_values(parts0.scheme, parts1.scheme)
-    username = _merge_values(parts0.username, parts1.username)
-    password = _merge_values(parts0.password, parts1.password)
-    hostname = _merge_values(parts0.hostname, parts1.hostname)
-    port = _merge_values(parts0.port, parts1.port)
-    path = posixpath.join(parts0.path, parts1.path)
-    params = parts0.params or parts1.params
-    query = urlencode(parse_qsl(parts0.query, True) + parse_qsl(parts1.query, True))
-    fragment = parts0.fragment or parts1.fragment
+    scheme = _merge(parts0.scheme, parts1.scheme, scheme, 'http')
+    username = _merge(parts0.username, parts1.username, username, None)
+    password = _merge(parts0.password, parts1.password, password, None)
+    hostname = _merge(parts0.hostname, parts1.hostname, hostname, None)
+    port = _merge(parts0.port, parts1.port, port, None)
+    path = _merge(parts0.path, parts1.path, path, '', _path_merger)
+    params = _merge(parts0.params, parts1.params, params, '')
+    query = _merge(parts0.query, parts1.query, query, '', _query_merger)
+    #query = urlencode(parse_qsl(parts0.query, True) + parse_qsl(parts1.query, True))
+    fragment = _merge(parts0.fragment, parts1.fragment, fragment, '')
     
     return _generate_url(scheme, username, password, hostname, port, path, params, query, fragment)
 
