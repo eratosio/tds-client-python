@@ -44,9 +44,10 @@ class Dataset(CatalogEntity):
             raise ValueError('Unable to find dataset "{}" in catalog hierarchy at {}.'.format(self.url, self._reference_catalog.url))
         return self._catalog
     
-    def get_services(self, force_reload=True):
+    def get_services(self, force_reload=False):
         catalog = self.get_catalog(force_reload)
         service_bases = catalog._resolve_services(self._service_ids)
+        print service_bases, self.url
         
         services = {}
         for service_type, service_class in get_service_classes(force_reload).iteritems():
@@ -63,7 +64,7 @@ class Dataset(CatalogEntity):
     
     @property
     def url(self):
-        return self._url
+        return self._url if self._xml is None else self._xml.attrib.get('urlPath', self._url)
     
     @property
     def client(self):

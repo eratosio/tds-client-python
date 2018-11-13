@@ -4,12 +4,14 @@ from tds_client.util import urls
 
 from xml.etree import cElementTree as ElementTree
 
-CATALOG_REF_TAG = '{' + namespaces.CATALOG + '}catalogRef'
-DATASET_TAG = '{' + namespaces.CATALOG + '}dataset'
+import re
+
 METADATA_TAG = '{' + namespaces.CATALOG + '}metadata'
 SERVICE_TAG = '{' + namespaces.CATALOG + '}service'
 SERVICE_NAME_TAG = '{' + namespaces.CATALOG + '}serviceName'
 XLINK_HREF_ATTR = '{' + namespaces.XLINK + '}href'
+
+_NAMESPACE_PATTERN = re.compile(r'^\s*(?:{([^}]+)})?(\w+)\s*$')
 
 class CatalogEntity(object):
     def _get_attribute(self, attr, force_reload=False, namespace=namespaces.CATALOG, default=None):
@@ -74,21 +76,7 @@ class Catalog(CatalogEntity):
     
     def _resolve_dataset(self, dataset, force_reload=False):
         self._get_xml(force_reload)
-        
-        # Try to find the dataset in this catalog.
-        if self._find_and_update_dataset(dataset, self._xml):
-            return True
-        
-        # Otherwise, recurse into child catalogs.
-        for catalog_ref_xml in self._xml.iterfind(CATALOG_REF_TAG):
-            catalog_url = catalog_ref_xml.attrib.get(XLINK_HREF_ATTR)
-            if catalog_url is not None:
-                catalog = Catalog(urls.resolve_path(self.url, '../', catalog_url), self._client)
-                
-                if catalog._resolve_dataset(dataset, force_reload):
-                    return True
-        
-        return False
+        return self._find_and_update_dataset(dataset, self._xml, force_reload, [])
     
     def _resolve_services(self, service_ids):
         return _resolve_services(self._get_xml(), service_ids, self.url)
@@ -98,24 +86,40 @@ class Catalog(CatalogEntity):
             response = self._client.session.get(self._url)
             response.raise_for_status()
             
+            self._url = response.url # In case a redirect occurs
             self._xml = ElementTree.fromstring(response.content)
         
         return self._xml
     
-    def _find_and_update_dataset(self, dataset, xml, ancestors=[]):
+    def _find_and_update_dataset(self, dataset, xml, force_reload, ancestors):
+        # TODO: is there a smart way to prioritise which datasets and/or catalog
+        # refs to recurse into, to minimise requests to the TDS?
+        
         # First try to find the dataset as a direct child of the given element.
-        matches = xml.findall(DATASET_TAG + "[@urlPath='" + dataset.url + "']")
+        dataset_url = dataset.url.lstrip(urls.path.sep)
+        filter = lambda tag: tag.attrib.get('urlPath', '').lstrip(urls.path.sep) == dataset_url
+        matches = list(Catalog._iter_children(xml, 'dataset', filter))
         if len(matches) == 1:
             self._update_dataset(dataset, matches[0], ancestors)
             return True
         elif len(matches) > 1:
             raise ValueError('Illegal catalog: duplicate datasets detected.')
         
-        # Failing that, recurse into all child datasets (in case the target
+        # Failing that, recurse into ALL child datasets (in case the target
         # dataset is nested).
-        for child_dataset_xml in xml.iterfind(DATASET_TAG):
-            if self._find_and_update_dataset(dataset, child_dataset_xml, ancestors + [child_dataset_xml]):
+        for child_dataset_xml in Catalog._iter_children(xml, 'dataset'):
+            if self._find_and_update_dataset(dataset, child_dataset_xml, force_reload, ancestors + [child_dataset_xml]):
                 return True
+        
+        # If that still hasn't found the dataset, try recursing into any catalog
+        # refs.
+        for catalog_ref_xml in Catalog._iter_children(xml, 'catalogRef'):
+            catalog_url = catalog_ref_xml.attrib.get(XLINK_HREF_ATTR)
+            if catalog_url is not None:
+                catalog = Catalog(urls.resolve_path(self.url, '../', catalog_url), self._client)
+                
+                if catalog._resolve_dataset(dataset, force_reload):
+                    return True
         
         return False
     
@@ -128,3 +132,20 @@ class Catalog(CatalogEntity):
         for ancestor_xml in ancestors_xml:
             for service_name_xml in ancestor_xml.iterfind(METADATA_TAG + "[@inherited='true']/" + SERVICE_NAME_TAG):
                 service_names.add(''.join(service_name_xml.itertext()))
+    
+    @staticmethod
+    def _iter_children(xml, target_tag, filter=lambda tag: True):
+        namespace, _ = Catalog._split_namespace(xml.tag)
+        # TODO: validate namespace against known TDS catalog namespace URIs?
+        
+        for child in xml:
+            child_namespace, child_tag = Catalog._split_namespace(child.tag)
+            if (child_namespace == namespace) and (child_tag == target_tag) and filter(child):
+                yield child
+    
+    @staticmethod
+    def _split_namespace(tag):
+        m = _NAMESPACE_PATTERN.match(tag)
+        if not m:
+            raise ValueError('Invalid tag "{}" detected.'.format(tag))
+        return m.groups()
