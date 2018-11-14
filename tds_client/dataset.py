@@ -1,16 +1,25 @@
 
-from .util import urls
-from .client import Client
-from . import service
+from tds_client.catalog import CatalogEntity
+from tds_client.service import get_service_classes
 
 import warnings
 
-class Dataset(object):
-    def __init__(self, client, url):
-        self.client = client
+class DatasetUrlWarning(UserWarning):
+    pass
+
+class Dataset(CatalogEntity):
+    def __init__(self, catalog, url):
+        if url.lower().endswith('.html'):
+            warnings.warn('The provided dataset URL {} ends with ".html". This is almost certainly not intended.'.format(url), DatasetUrlWarning)
+        
+        self._reference_catalog = catalog
         self._url = url
         
-        self.services = { k:v(self) for k,v in service.get_service_classes().iteritems() }
+        self._catalog = None
+        self._parent = None
+        self._xml = None
+        
+        self._service_ids = set()
     
     def __getattr__(self, attr):
         try:
@@ -18,51 +27,69 @@ class Dataset(object):
         except KeyError:
             raise AttributeError()
     
-    @staticmethod
-    def from_url(dataset_url, context_url=None, session=None, client=None):
-        # Log a warning if the context URL and/or session are supplied as well
-        # as the client (as the client will override them).
-        if client is not None and context_url is not None:
-            warnings.warn('Context URL passed to `Dataset.from_url()` will be overriden by passed client.')
-        if client is not None and session is not None:
-            warnings.warn('Session passed to `Dataset.from_url()` will be overriden by passed client.')
+    def __str__(self):
+        return 'Dataset(id="{}", name="{}")'.format(self.id, self.name)
+    
+    def get_id(self, force_reload=False):
+        return self._get_attribute('ID', force_reload)
+    
+    def get_name(self, force_reload=False):
+        return self._get_attribute('name', force_reload)
+    
+    def get_restrict_access(self, force_reload=False):
+        return self._get_attribute('restrictAccess', force_reload)
+    
+    def get_catalog(self, force_reload=False):
+        if not self._reference_catalog._resolve_dataset(self, force_reload):
+            raise ValueError('Unable to find dataset "{}" in catalog hierarchy at {}.'.format(self.url, self._reference_catalog.url))
+        return self._catalog
+    
+    def get_services(self, force_reload=False):
+        catalog = self.get_catalog(force_reload)
+        service_bases = catalog._resolve_services(self._service_ids)
+        print service_bases, self.url
         
-        # The dataset URL must, at a minimum, have a path component.
-        dataset_parts = urls.urlparse(dataset_url)
-        if not dataset_parts.path:
-            raise ValueError('Dataset URL "{}" does not contain a path component.'.format(dataset_url))
+        services = {}
+        for service_type, service_class in get_service_classes(force_reload).iteritems():
+            try:
+                service_base = service_bases[service_type.lower()]
+                
+                services[service_type] = service_instance = service_class(self, service_base)
+                for alias in getattr(service_class, 'aliases', []):
+                    services[alias] = service_instance
+            except KeyError:
+                pass
         
-        # If client given, use its context URL.
-        if client is not None:
-            context_url = client.context_url
-        # Otherise, ensure that the context URL, if given, doesn't point at the
-        # catalog.
-        elif context_url:
-            context_parts = urls.urlparse(context_url)
-            head, tail = urls.path.split(context_parts.path)
-            if tail == 'catalog.xml':
-                context_url = urls.override(context_url, path=head)
-            
-        # If the dataset URL is fully qualified, split it into its parts.
-        if all(map(bool, dataset_parts[0:2])):
-            dataset_context, service_path, dataset_path = service.split_service_url(dataset_url)
-            
-            # If no context URL specified, use the dataset's context URL.
-            if not context_url:
-                context_url = dataset_context
-            # Otherwise, the dataset context URL must match the context URL.
-            elif not urls.same_resource(context_url, dataset_context):
-                raise ValueError('Dataset URL "{}" names different server to context URL "{}".'.format(dataset_url, context_url))
-        # Otherwise the dataset path is just the supplied dataset URL without
-        # any scheme or netloc that is present.
-        else:
-            dataset_path = urls.urlunparse(('', '') + dataset_parts[2:])
-        
-        if client is None:
-            client = Client(context_url, session)
-        
-        return Dataset(client, dataset_path)
+        return services
     
     @property
     def url(self):
-        return self._url
+        return self._url if self._xml is None else self._xml.attrib.get('urlPath', self._url)
+    
+    @property
+    def client(self):
+        return self._reference_catalog.client
+    
+    @property
+    def id(self):
+        return self.get_id()
+    
+    @property
+    def name(self):
+        return self.get_name()
+    
+    @property
+    def restrict_access(self):
+        return self.get_restrict_access()
+    
+    @property
+    def catalog(self):
+        return self.get_catalog()
+    
+    @property
+    def services(self):
+        return self.get_services()
+    
+    def _get_xml(self, force_reload):
+        self._reference_catalog._resolve_dataset(self, force_reload)
+        return self._xml

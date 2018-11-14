@@ -1,5 +1,5 @@
 
-from .util import urls
+from tds_client.util import urls
 import requests
 
 class Client(object):

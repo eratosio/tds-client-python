@@ -28,8 +28,8 @@ setup(
     ],
     entry_points = {
         'tds_client.service': [
-            'opendap = tds_client.service.opendap:OPeNDAPService',
-            'ncss = tds_client.service.ncss:NetCDFSubsetService'
+            'OpenDAP = tds_client.service.opendap:OPeNDAPService',
+            'NetcdfSubset = tds_client.service.ncss:NetCDFSubsetService'
         ]
     },
     classifiers = [
