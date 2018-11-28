@@ -98,10 +98,7 @@ class Catalog(CatalogEntity):
         if (self._xml is None) or force_reload:
             response = self._client.session.get(self._url)
             response.raise_for_status()
-            
-            print '---', self._url, response.url
             self._url = urls.merge(self._url, response.url, **_REDIRECT_MERGE_RULES) # In case a redirect occurs
-            print '***', self._url
             self._xml = ElementTree.fromstring(response.content)
         
         return self._xml
@@ -131,7 +128,6 @@ class Catalog(CatalogEntity):
         for catalog_ref_xml in Catalog._iter_children(xml, 'catalogRef'):
             catalog_url = catalog_ref_xml.attrib.get(XLINK_HREF_ATTR)
             if catalog_url is not None:
-                print self.url, catalog_url, urls.resolve_path(self.url, '../', catalog_url)
                 catalog = Catalog(urls.resolve_path(self.url, '../', catalog_url), self._client)
                 
                 if catalog._resolve_dataset(dataset, force_reload):
