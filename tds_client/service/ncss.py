@@ -106,7 +106,7 @@ def _prepare_params(accept, **kwargs):
     # TODO: Check for duplicate parameter definitions due to aliasing.
 
     # Resolve aliases.
-    params = { _SUBSET_PARAM_ALIASES.get(k, k): v for k,v in params.iteritems() }
+    params = { _SUBSET_PARAM_ALIASES.get(k, k): v for k,v in params.items() }
 
     # Check for required parameters.
     missing_required = set(['var']).difference(params.keys())
