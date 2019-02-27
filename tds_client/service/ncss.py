@@ -48,80 +48,80 @@ class NetCDFSubsetService(StandardService):
     service_type = 'NetcdfSubset'
     name = 'NetCDF Subset Service'
     aliases = ['ncss']
-    
+
     def get_subset(self, session=None, accept='netCDF', **kwargs):
         accept = str(accept).lower()
-        
+
         fd, path = tempfile.mkstemp(prefix='ncss_', suffix='.nc')
-        
+
         _download_subset(self.url, (session or self._session), fd, accept, **kwargs)
-        
+
         # Create dataset.
         if accept in ('netcdf', 'netcdf4'):
             from pydap.handlers.netcdf import NetCDFHandler
-            
+
             dataset = NetCDFHandler(path).dataset
         elif accept == 'csv':
             import pandas as pd
-            
+
             dataset = pd.read_csv(path, header=0)
         elif accept == 'xml':
             import xml.etree.cElementTree as ET
-            
+
             dataset = ET.parse(path)
         else:
             raise ValueError('Unable to parse response type "{}"'.format(accept))
-        
+
         # Monkey-patch dataset to add a filepath property and a delete() method.
         dataset.filepath = path
         dataset.delete = types.MethodType(lambda instance: _safe_rm(path), dataset)
-        
+
         return dataset
-    
+
     def download_subset(self, path, session=None, accept='netCDF', **kwargs):
         fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC)
         _download_subset(self.url, (session or self._session), fd, accept, **kwargs)
-    
+
     def get_prepared_url(self, session=None, accept='netCDF', **kwargs):
         from requests import Request
-        
+
         session = session or self._session
         params = _prepare_params(accept, **kwargs)
         request = Request('GET', self.url, params=params)
-        
+
         return session.prepare_request(request).url
 
 def _prepare_params(accept, **kwargs):
     if str(accept).lower() not in _VALID_ACCEPT_VALUES:
         raise ValueError('Invalid value for parameter "accept". Valid values are: {}'.format(','.join(_VALID_ACCEPT_VALUES)))
-    
+
     # Ignore parameters set to None.
-    params = { k:v for k,v in kwargs.iteritems() if v is not None }
-    
+    params = { k:v for k,v in kwargs.items() if v is not None }
+
     # Check for unknown parameters.
     unknown_args = set(params.keys()) - _SUPPORTED_SUBSET_PARAMS
     if unknown_args:
         raise TypeError('Unsupported keyword argument(s): {}'.format(', '.join(unknown_args)))
-    
+
     # TODO: Check for duplicate parameter definitions due to aliasing.
-    
+
     # Resolve aliases.
-    params = { _SUBSET_PARAM_ALIASES.get(k, k): v for k,v in params.iteritems() }
-    
+    params = { _SUBSET_PARAM_ALIASES.get(k, k): v for k,v in params.items() }
+
     # Check for required parameters.
     missing_required = set(['var']).difference(params.keys())
     if missing_required:
         raise ValueError('Missing required parameter(s): {}'.format(', '.join(missing_required)))
-    
+
     # Check for mutually dependent parameters.
     _check_dependent_params(params, { 'latitude', 'longitude' })
     _check_dependent_params(params, { 'north', 'east', 'south', 'west' })
-    
+
     # Check for mutually exclusive parameters.
     _check_exclusive_params(params, { 'latitude', 'longitude' }, { 'north', 'east', 'south', 'west' })
-    
+
     params['accept'] = accept
-    
+
     return params
 
 def _check_dependent_params(params, param_set):
