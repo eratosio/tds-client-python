@@ -26,12 +26,6 @@ setup(
         'pydap',
         'netCDF4'
     ],
-    entry_points = {
-        'tds_client.service': [
-            'OpenDAP = tds_client.service.opendap:OPeNDAPService',
-            'NetcdfSubset = tds_client.service.ncss:NetCDFSubsetService'
-        ]
-    },
     classifiers = [
         'Development Status :: 3 - Alpha',
         'Topic :: Scientific/Engineering :: Information Analysis',
