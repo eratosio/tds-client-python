@@ -3,6 +3,72 @@ from tds_client.util import abc, urls
 
 from difflib import SequenceMatcher
 from functools import partial
+from requests import HTTPError
+
+
+class SearchStrategy(abc.ABC):
+    def find_dataset(self, catalog, dataset_url):
+        return self._search(catalog, self.catalog_has_dataset, dataset_url)
+
+    def find_service(self, catalog, service_type, dataset_url):
+        return self._search(catalog, self.catalog_has_service, dataset_url, service_type)
+
+    # noinspection PyMethodMayBeStatic
+    def get_next_candidates(self, catalog, dataset_url):
+        matcher = SequenceMatcher(None, '', dataset_url)
+        key = partial(SearchStrategy._catalog_sort_order, matcher)
+        return [catalog] + sorted(catalog.get_child_catalogs(False), key=key, reverse=True)
+
+    @abc.abstractmethod
+    def catalog_has_dataset(self, catalog, dataset_url):
+        pass
+
+    @abc.abstractmethod
+    def catalog_has_service(self, catalog, service_type, dataset_url):
+        pass
+
+    def _search(self, catalog, predicate, dataset_url, *args):
+        for candidate in self.get_next_candidates(catalog, dataset_url):
+            try:
+                if predicate(candidate, *(args + (dataset_url,))):
+                    return candidate
+
+                if candidate.url != catalog.url:
+                    result = self._search(candidate, predicate, dataset_url, *args)
+                    if result is not None:
+                        return result
+            except HTTPError as e:
+                pass  # TODO: handle exceptions more intelligently
+
+    @staticmethod
+    def _catalog_sort_order(matcher, catalog):
+        matcher.set_seq1(urls.urlparse(catalog.url).path)
+        return matcher.quick_ratio()
+
+
+class QuickSearchStrategy(SearchStrategy):
+    def catalog_has_dataset(self, catalog, dataset_url):
+        return dataset_url in catalog.get_datasets(False)
+
+    def catalog_has_service(self, catalog, service_type, dataset_url):
+        # NOTE: the dataset URL is intentionally ignored, that's what makes this algorithm "quick".
+        return len(catalog.get_services(service_type)) == 1
+
+
+class ExhaustiveSearchStrategy(QuickSearchStrategy):
+    def catalog_has_service(self, catalog, service_type, dataset_url):
+        return super(ExhaustiveSearchStrategy, self).catalog_has_service(catalog, service_type, dataset_url) and self.catalog_has_dataset(catalog, dataset_url)
+
+
+
+
+
+
+
+
+
+
+
 
 
 class CatalogSearch(abc.ABC):

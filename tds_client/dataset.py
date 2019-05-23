@@ -3,26 +3,16 @@ from __future__ import print_function
 
 from tds_client.catalog.common import CatalogEntity
 from tds_client.service import SERVICE_CLASSES
-from tds_client.catalog.search import DatasetSearch, ServiceSearch
-from tds_client import settings
 from tds_client.util import xml, strings
 
 import warnings
 from collections.abc import Mapping
 
 
-class DatasetUrlWarning(UserWarning):
-    pass
-
-
-class QuickSearchWarning(UserWarning):
-    pass
-
-
 class Dataset(CatalogEntity, Mapping):
     def __init__(self, catalog, url):
         if url.lower().endswith('.html'):
-            warnings.warn('The provided dataset URL {} ends with ".html". This is almost certainly not intended.'.format(url), DatasetUrlWarning)
+            warnings.warn('The provided dataset URL {} ends with ".html". This is almost certainly not intended.'.format(url))
 
         self._reference_catalog = catalog
         self._url = url
@@ -55,14 +45,17 @@ class Dataset(CatalogEntity, Mapping):
     def get_name(self, force_reload=False):
         return self._get_attribute('name', force_reload)
 
-    def get_catalog(self, force_reload=False):
-        self._catalog = self._find_catalog(force_reload, DatasetSearch(self.url))
-        if self._catalog is None:
-            raise RuntimeError('Unable to find dataset "{}" in catalog hierarchy at {}.'.format(self.url, self._reference_catalog.url))
+    def get_catalog(self, strategy=None, force_reload=False):
+        if force_reload or (self._catalog is None):
+            strategy = self.client.pick_strategy(strategy)
+            self._catalog = strategy().find_dataset(self._reference_catalog, self.url)
+
+            if self._catalog is None:
+                raise RuntimeError('Unable to find dataset "{}" in catalog hierarchy at {}.'.format(self.url, self._reference_catalog.url))
 
         return self._catalog
 
-    def get_service(self, service_key, quick_search=None, force_reload=False):
+    def get_service(self, service_key, strategy=None, force_reload=False):
         key = strings.normalise(service_key)
 
         service = self._service_lookup.get(key)
@@ -74,14 +67,16 @@ class Dataset(CatalogEntity, Mapping):
         except KeyError:
             raise ValueError('Unsupported service "{}"'.format(service_key))
 
-        if quick_search is None:
-            quick_search = settings.quick_search
+        if self._catalog is None:
+            strategy = self.client.pick_strategy(strategy)
+            catalog = strategy().find_service(self._reference_catalog, service_class.service_type, self.url)
 
-        search = ServiceSearch(service_class.service_type, self.url) if quick_search else DatasetSearch(self.url)
-        catalog = self._find_catalog(False, search) # TODO: properly set the force_reload parameter
+            if catalog is None:
+                raise RuntimeError('Unable to find definition of {} service in catalog hierarchy at {}.'.format(service_key, self._reference_catalog.url))
 
-        if catalog is None:
-            raise RuntimeError('Unable to find definition of {} service in catalog hierarchy at {}.'.format(service_key, self._reference_catalog.url))
+            self._update_catalog(catalog)
+        else:
+            catalog = self._catalog
 
         service_specs = catalog.get_services(service_class.service_type)
         if not service_specs:
@@ -90,7 +85,7 @@ class Dataset(CatalogEntity, Mapping):
             raise RuntimeError('Service lookup for {} found multiple matching services in the catalog at {}.'.format(service_key, catalog.url))
 
         if self.url not in catalog.get_datasets(False): # TODO: properly set the force_reload parameter
-            warnings.warn('Found {} service for dataset {} using quick-search algorithm: this may not work correctly. If problems occur, change the "quick_search" parameter to False.'.format(service_key, self.url), QuickSearchWarning)
+            warnings.warn('Found {} service for dataset {} using a heuristic strategy, which may have not found the correct service definition. If problems occur, change the search strategy to ExhaustiveSearchStrategy'.format(service_key, self.url))
 
         # TODO: if the resolved catalog contains the dataset, confirm that the requested service is enabled for the dataset.
 
@@ -118,9 +113,6 @@ class Dataset(CatalogEntity, Mapping):
 
         return self._xml
 
-    def _find_catalog(self, force_reload, search):
-        return search.search(self._reference_catalog) if force_reload or (self._catalog is None) else self._catalog
-
     @property
     def url(self):
         return self._url if self._xml is None else self._xml.attrib.get('urlPath', self._url)
@@ -147,3 +139,8 @@ class Dataset(CatalogEntity, Mapping):
             self.get_service(service_type, force_reload=False)
 
         return self._service_ids
+
+    def _update_catalog(self, catalog):
+        if (catalog is not None) and (self.url in catalog.get_datasets(False)):
+            self._catalog = catalog
+        return catalog
