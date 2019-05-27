@@ -31,4 +31,5 @@ class Service(object):
 class StandardService(Service):
     @property
     def url(self):
-        return urls.resolve_path(self.base_url, self._dataset.url)
+        dataset_path = self._dataset.url.lstrip(urls.path.sep)  # strip leading separators - the path should ALWAYS be relative
+        return urls.resolve_path(self.base_url, dataset_path)

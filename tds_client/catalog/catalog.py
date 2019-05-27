@@ -119,7 +119,6 @@ class Catalog(CatalogEntity):
 
     def as_xml_tree(self, force_reload=False):
         if force_reload or (self._xml is None):
-            print('Loading {}'.format(self.url))
             response = self._client.session.get(self._url)
             response.raise_for_status()
             self._url = urls.merge(self._url, response.url, **_REDIRECT_MERGE_RULES)  # In case a redirect occurred
