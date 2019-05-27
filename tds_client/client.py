@@ -1,10 +1,14 @@
 
 from tds_client.util import urls
+from tds_client.catalog.search import QuickSearchStrategy
+from tds_client import settings
+
 import requests
 
 class Client(object):
-    def __init__(self, url, session=None):
+    def __init__(self, url, session=None, strategy=None):
         self.session = session or requests.Session()
+        self.strategy = strategy
         
         # Given URL must be fully qualified (otherwise it's not useful for
         # anything).
@@ -17,6 +21,9 @@ class Client(object):
         context_path = head if tail == 'catalog.xml' else url_parts.path
         self._context_url = urls.override(url, path=context_path)
         self._catalog_url = urls.override(url, path=urls.path.join(context_path, 'catalog.xml'))
+
+    def pick_strategy(self, strategy=None):
+        return strategy or self.strategy or settings.strategy or QuickSearchStrategy
     
     @property
     def context_url(self):

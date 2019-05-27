@@ -5,95 +5,107 @@ Dataset
 
    Provides a representation of a TDS dataset.
    
-   The ``client`` constructor parameter must be an instance of the ``Client``
-   class, which will be used to access the dataset's service endpoints.
+   The ``client`` constructor parameter must be an instance of the :class:`Client` class, which will be used to access
+   the dataset's service endpoints.
    
-   The ``url`` constructor parameter must be a partial URL (without any scheme,
-   host, port, username or password) identifying the TDS dataset. This URL
-   will be resolved against the client's ``context_url`` to determine the final
-   URL of each of the dataset's service endpoints. Requests made to these URLs
-   will use the client's ``session``.
-   
-   Typically there should be no need to directly instantiate this class. The
-   ``from_url`` static method should be used if it is necessary to manually
-   create an instance of this class.
-   
+   The ``url`` constructor parameter must be a partial URL (without any scheme, host, port, username or password)
+   identifying the TDS dataset. This URL will be resolved against the client's ``context_url`` to determine the final
+   URL of each of the dataset's service endpoints. Requests made to these URLs will use the client's ``session``.
+
+   Each dataset has associated with it a number of services which can be used to access the dataset's data. This class
+   exposes these services with a dictionary-like interface. As an added convenience, service lookup is case-insensitive,
+   allows using some common aliases, and also supports attribute-style lookup. For example, given a ``Dataset`` object
+   ``my_dataset``, the following are all valid ways of obtaining its NetCDF subset service.
+
+   ::
+
+     my_dataset['NetCDFSubset'] # Dictionary-style lookup
+     my_dataset['netcdfsubset'] # Dictionary-style lookup, case-insensitve
+     my_dataset['ncss']         # Dictionary-style lookup, with "ncss" alias
+     my_dataset.ncss            # Attribute-style lookup, with "ncss" alias
+
+   All the services available for the dataset may be enumerated by enumerating over the dataset itself:
+
+   ::
+
+     for service in my_dataset.values():
+       print('{}: {}'.format(service.service_type, service.name))
+
+   Accessing services using dictionary-style always uses a "lazy" lookup algorithm: if the service configuration has
+   previously loaded from the Thredds server, it won't bother reloading it. If the configuration does need to be loaded,
+   the globally-configured catalog search algorithm is used (see Global Configuration for more information). If
+   necessary, the :func:`get_service` method can be used to override these
+   behaviours while obtaining a service.
+
+   .. rubric:: Attributes
+
+   .. attribute:: url
+
+      The dataset's URL (see the ``url`` parameter of the class constructor), as a **read-only** property.
+
    .. attribute:: client
       
-      A Client instance to be used to interact with the TDS dataset. When
-      accessing services, this dataset's URL is resolved relative to the client
-      URL, and the client's ``session`` is used when making HTTP requests.
-   
-   .. attribute:: url
-      
-      The dataset's URL (see the ``url`` parameter of the class constructor), as
-      a **read-only** property.
-   
-   .. attribute:: services
-      
-      A dictionary mapping service IDs to instances of the corresponding service
-      class. For example ``my_dataset.services['opendap']`` is an instance of
-      the ``OPeNDAPService`` class, providing access to the dataset's OPeNDAP
-      endpoint.
-      
-      See the service documentation for more information regarding services and
-      service IDs.
-      
-      Note that the ``Dataset`` class also provides attribute-style access to
-      services - for example, the same service could have been accessed as
-      ``my_dataset.opendap``. As such, the ``services`` attribute is mostly
-      useful as a way of enumerating the services available for a given dataset.
-   
-   .. method:: __getattr__(attr)
-      
-      Used to provide attribute-style access to the dataset's services. For
-      example, a dataset's OPeNDAP endpoint can be queried by obtaining the
-      corresponding service object from the dataset's ``opendap`` attribute.
-   
-   .. staticmethod:: from_url(dataset_url, context_url=None, session=None, client=None)
-      
-      Given a dataset URL (either as a partially-qualified URL path, or as a
-      fully-qualified URL to one of the dataset's services), returns a
-      corresponding ``Dataset`` instance.
-      
-      If the given dataset URL is not fully qualified (i.e. has no scheme, host,
-      port, username and password), then either the ``context_url`` or
-      ``client`` parameters must be supplied.
-      
-      If the ``context_url`` parameter is supplied, it must be the TDS server's
-      application URL (e.g. ``http://example.com/thredds``), or the URL to the
-      TDS server's root catalog
-      (e.g. ``http://example.com/thredds/catalog.xml``). This URL is then used
-      as the "context URL" to fully resolve the dataset URL when accessing
-      services.
-      
-      If, instead, the ``client`` parameter is supplied, it must be an instance
-      of the ``Client`` class. The client's ``context_url`` property is then
-      used as the dataset's context URL.
-      
-      If the dataset URL is a fully qualified URL to one of the dataset's
-      available services, the context URL is derived by splitting the URL based
-      on the position of the service's URL path component - for example,
-      the context URL ``http://example.com/thredds`` is derived from
-      ``http://example.com/thredds/dodsC/dataset.nc`` by noting the location of
-      the ``dodsC`` path component corresponding to the OPeNDAP service. The
-      remaining portion after the service path component (i.e. ``dataset.nc`` in
-      this case) is then used as the canonical dataset URL.
-      
-      If the dataset URL is fully qualified and either the ``context_url`` or
-      ``client`` parameters are given, it is an error if the context URL derived
-      as described in the preceding paragraph doesn't match that of the
-      ``context_url`` parameter or the client's ``context_url`` attribute.
-      
-      If no ``client`` is given, a new ``Client`` instance is created from the
-      context URL (as determined from the above rules) and the given ``session``
-      (if any).
-      
-      A new ``Dataset`` instance is then returned, using the client instance and
-      dataset URL as determined through the above process.
-      
-      .. note::
-         
-         If the ``context_url`` and/or ``session`` parameters are supplied *as
-         well as* the ``client`` parameter, a warning will be issued as the
-         values supplied by the client will be used in preference.
+      A Client instance to be used to interact with the TDS dataset. When accessing services, this dataset's URL is
+      resolved relative to the client URL, and the client's ``session`` is used when making HTTP requests.
+
+   .. attribute:: id
+
+      The dataset's ID. Equivalent to passing ``False`` to :func:`get_id`.
+
+   .. attribute:: name
+
+      The dataset's name. Equivalent to passing ``False`` to :func:`get_name`.
+
+   .. attribute:: catalog
+
+      The :class:`Catalog` that contains the dataset. Equivalent to passing ``False`` to :func:`get_catalog`.
+
+   .. rubric:: Methods
+
+   .. method:: get_id(force_reload=False)
+
+      Get the dataset's "ID" property. The dataset's XML representation is loaded from the Thredds server if it hasn't
+      been loaded previously, or if ``force_reload`` is set to ``True``.
+
+   .. method:: get_name(force_reload=False)
+
+      Get the dataset's "name" property. The dataset's XML representation is loaded from the Thredds server if it hasn't
+      been loaded previously, or if ``force_reload`` is set to ``True``.
+
+   .. method:: get_catalog(force_reload=False)
+
+      Get the :class:`Catalog` containing the dataset. If the Catalog passed to the dataset's constructor represents an
+      ancestor catalog in the Thredds server's catalog hierarchy (rather than the catalog actually containing the
+      dataset), then the server's catalog hierarchy will be examined to find the actual catalog declaring the dataset.
+
+      If ``force_reload`` is ``True``, the catalog will be loaded from the Thredds server even if it has been loaded
+      previously.
+
+   .. method:: get_service(service_key, quick_search=None, force_reload=False)
+
+      Get a dataset service.
+
+      This method will cause the service configuration to be loaded from the Thredds server if it hasn't been previously
+      loaded, or if the ``force_reload`` parameter is set to ``True``. If the ``force_reload`` parameter is set to
+      ``False`` (the default), then the configuration is only loaded if it hasn't been previously loaded.
+
+      The choice of algorithm for loading the service configuration depends on the value of the ``quick_search``
+      parameter. If set to ``False``, then the entire Thredds catalog hierarchy is searched for the catalog containing
+      the dataset, starting from the catalog passed in the ``Dataset``'s constructor. This may require a large number of
+      requests to the Thredds server (potentially taking a long time) if the server has a complex catalog hierarchy, but
+      is guaranteed to find the correct service configuration.
+
+      Setting ``quick_search`` to ``True`` will minimise the number of requests to the Thredds server by instead
+      stopping as soon as a matching service configuration is found. Although this may reduce the number of queries by
+      stopping earlier, it isn't guaranteed that the service configuration found will be the same as that actually
+      intended for the dataset. There are two potential problems that may arise from using this option:
+
+      - The service configuration discovered through this means may be incorrect, if the Thredds catalog contains
+        references to external Thredds servers.
+      - The check on whether the dataset has the corresponding service enabled may be skipped. If it turns out the
+        service actually isn't enabled for the given dataset, this may cause errors.
+
+      If problems do occur, setting ``quick_search`` to ``False`` should resolve them.
+
+      If ``quick_search`` is set to ``None`` (the default), then the global ``quick_search`` configuration option is
+      used.

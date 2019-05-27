@@ -1,18 +1,18 @@
 
 from __future__ import print_function
 
-from tds_client.catalog import CatalogEntity
-from tds_client.service import get_service_classes
+from tds_client.catalog.common import CatalogEntity
+from tds_client.service import SERVICE_CLASSES
+from tds_client.util import xml, strings
 
 import warnings
+from collections.abc import Mapping
 
-class DatasetUrlWarning(UserWarning):
-    pass
 
-class Dataset(CatalogEntity):
+class Dataset(CatalogEntity, Mapping):
     def __init__(self, catalog, url):
         if url.lower().endswith('.html'):
-            warnings.warn('The provided dataset URL {} ends with ".html". This is almost certainly not intended.'.format(url), DatasetUrlWarning)
+            warnings.warn('The provided dataset URL {} ends with ".html". This is almost certainly not intended.'.format(url))
 
         self._reference_catalog = catalog
         self._url = url
@@ -22,15 +22,22 @@ class Dataset(CatalogEntity):
         self._xml = None
 
         self._service_ids = set()
+        self._service_lookup = {}
 
-    def __getattr__(self, attr):
-        try:
-            return self.services[attr]
-        except KeyError:
-            raise AttributeError()
+    def __getattr__(self, key):
+        return self[key]
+
+    def __getitem__(self, key):
+        return self.get_service(key)
+
+    def __iter__(self):
+        return iter(self.service_ids)
+
+    def __len__(self):
+        return len(self.service_ids)
 
     def __str__(self):
-        return 'Dataset(id="{}", name="{}")'.format(self.id, self.name)
+        return 'Dataset(id="{}", name="{}", service_ids={})'.format(self.id, self.name, self.service_ids)
 
     def get_id(self, force_reload=False):
         return self._get_attribute('ID', force_reload)
@@ -38,31 +45,73 @@ class Dataset(CatalogEntity):
     def get_name(self, force_reload=False):
         return self._get_attribute('name', force_reload)
 
-    def get_restrict_access(self, force_reload=False):
-        return self._get_attribute('restrictAccess', force_reload)
+    def get_catalog(self, strategy=None, force_reload=False):
+        if force_reload or (self._catalog is None):
+            strategy = self.client.pick_strategy(strategy)
+            self._catalog = strategy().find_dataset(self._reference_catalog, self.url)
 
-    def get_catalog(self, force_reload=False):
-        if not self._reference_catalog._resolve_dataset(self, force_reload):
-            raise ValueError('Unable to find dataset "{}" in catalog hierarchy at {}.'.format(self.url, self._reference_catalog.url))
+            if self._catalog is None:
+                raise RuntimeError('Unable to find dataset "{}" in catalog hierarchy at {}.'.format(self.url, self._reference_catalog.url))
+
         return self._catalog
 
-    def get_services(self, force_reload=False):
-        catalog = self.get_catalog(force_reload)
-        service_bases = catalog._resolve_services(self._service_ids)
-        print(service_bases, self.url)
+    def get_service(self, service_key, strategy=None, force_reload=False):
+        key = strings.normalise(service_key)
 
-        services = {}
-        for service_type, service_class in get_service_classes(force_reload).items():
-            try:
-                service_base = service_bases[service_type.lower()]
+        service = self._service_lookup.get(key)
+        if not force_reload and service is not None:
+            return service
 
-                services[service_type] = service_instance = service_class(self, service_base)
-                for alias in getattr(service_class, 'aliases', []):
-                    services[alias] = service_instance
-            except KeyError:
-                pass
+        try:
+            service_class = SERVICE_CLASSES[service_key]
+        except KeyError:
+            raise ValueError('Unsupported service "{}"'.format(service_key))
 
-        return services
+        if self._catalog is None:
+            strategy = self.client.pick_strategy(strategy)
+            catalog = strategy().find_service(self._reference_catalog, service_class.service_type, self.url)
+
+            if catalog is None:
+                raise RuntimeError('Unable to find definition of {} service in catalog hierarchy at {}.'.format(service_key, self._reference_catalog.url))
+
+            self._update_catalog(catalog)
+        else:
+            catalog = self._catalog
+
+        service_specs = catalog.get_services(service_class.service_type)
+        if not service_specs:
+            raise RuntimeError('Service lookup for {} resolved to catalog at {}, but was unable to find the service in the catalog.'.format(service_key, catalog.url))
+        elif len(service_specs) > 1:
+            raise RuntimeError('Service lookup for {} found multiple matching services in the catalog at {}.'.format(service_key, catalog.url))
+
+        if self.url not in catalog.get_datasets(False): # TODO: properly set the force_reload parameter
+            warnings.warn('Found {} service for dataset {} using a heuristic strategy, which may have not found the correct service definition. If problems occur, change the search strategy to ExhaustiveSearchStrategy'.format(service_key, self.url))
+
+        # TODO: if the resolved catalog contains the dataset, confirm that the requested service is enabled for the dataset.
+
+        service = self._service_lookup[key] = service_class(self, service_specs[0].url_base)
+        self._service_ids.add(service_key)
+        for alias in getattr(service_class, 'aliases', []):
+            self._service_lookup[strings.normalise(alias)] = service
+
+        return service
+
+    def as_xml_tree(self, force_reload):
+        if force_reload or self._xml is None:
+            catalog = self.get_catalog(force_reload)
+            catalog_xml = catalog.as_xml_tree(False)
+            namespace, _ = xml.split_namespace(catalog_xml.tag, xml.CATALOG)
+
+            for dataset_xml in xml.search(catalog_xml, 'dataset', 'dataset'):
+                url_path = xml.get_attr(dataset_xml, 'urlPath', namespace)
+                if url_path == self.url:
+                    self._xml = dataset_xml
+                    break
+
+            if self._xml is None:
+                raise RuntimeError('Resolved catalog {} for dataset {}, but was unable to find the dataset in that catalog.'.format(catalog.url, self.url))
+
+        return self._xml
 
     @property
     def url(self):
@@ -81,17 +130,17 @@ class Dataset(CatalogEntity):
         return self.get_name()
 
     @property
-    def restrict_access(self):
-        return self.get_restrict_access()
-
-    @property
     def catalog(self):
         return self.get_catalog()
 
     @property
-    def services(self):
-        return self.get_services()
+    def service_ids(self):
+        for service_type in SERVICE_CLASSES.keys():
+            self.get_service(service_type, force_reload=False)
 
-    def _get_xml(self, force_reload):
-        self._reference_catalog._resolve_dataset(self, force_reload)
-        return self._xml
+        return self._service_ids
+
+    def _update_catalog(self, catalog):
+        if (catalog is not None) and (self.url in catalog.get_datasets(False)):
+            self._catalog = catalog
+        return catalog

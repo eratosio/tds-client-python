@@ -6,5 +6,9 @@
 /dist
 /doc/_build
 
+.idea
+
+.venv
+
 test.py
 
