@@ -1,9 +1,12 @@
 
-from tds_client.util import abc, xml
+from tds_client.util import xml
+from abc import ABCMeta, abstractmethod
+
+ABC = ABCMeta('ABC', (object,), {'__slots__': ()})  # compatible with Python 2 *and* 3
 
 
-class CatalogEntity(abc.ABC):
-    @abc.abstractmethod
+class CatalogEntity(ABC):
+    @abstractmethod
     def as_xml_tree(self, force_reload=False):
         pass
 
