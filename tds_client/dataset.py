@@ -6,7 +6,11 @@ from tds_client.service import SERVICE_CLASSES
 from tds_client.util import xml, strings
 
 import warnings
-from collections.abc import Mapping
+
+try:
+    from collections.abc import Mapping  # python3
+except ImportError:
+    from collections import Mapping  # python2
 
 
 class Dataset(CatalogEntity, Mapping):

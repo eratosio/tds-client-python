@@ -1,12 +1,15 @@
 
-from tds_client.util import abc, urls
+from tds_client.util import urls
 
 from difflib import SequenceMatcher
 from functools import partial
 from requests import HTTPError
+from abc import ABCMeta, abstractmethod
+
+ABC = ABCMeta('ABC', (object,), {'__slots__': ()})  # compatible with Python 2 *and* 3
 
 
-class SearchStrategy(abc.ABC):
+class SearchStrategy(ABC):
     def find_dataset(self, catalog, dataset_url):
         return self._search(catalog, self.catalog_has_dataset, dataset_url)
 
@@ -19,11 +22,11 @@ class SearchStrategy(abc.ABC):
         key = partial(SearchStrategy._catalog_sort_order, matcher)
         return [catalog] + sorted(catalog.get_child_catalogs(False), key=key, reverse=True)
 
-    @abc.abstractmethod
+    @abstractmethod
     def catalog_has_dataset(self, catalog, dataset_url):
         pass
 
-    @abc.abstractmethod
+    @abstractmethod
     def catalog_has_service(self, catalog, service_type, dataset_url):
         pass
 
@@ -71,8 +74,8 @@ class ExhaustiveSearchStrategy(QuickSearchStrategy):
 
 
 
-class CatalogSearch(abc.ABC):
-    @abc.abstractmethod
+class CatalogSearch(ABC):
+    @abstractmethod
     def search(self, catalog, force_reload=False):
         pass
 
@@ -98,7 +101,7 @@ class RecursiveSearch(CatalogSearch):
             if child_result:
                 return child_result
 
-    @abc.abstractmethod
+    @abstractmethod
     def is_match(self, catalog):
         pass
 

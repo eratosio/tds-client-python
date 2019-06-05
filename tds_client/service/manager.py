@@ -1,6 +1,11 @@
 
+
 from pkg_resources import iter_entry_points
-from collections.abc import Mapping
+
+try:
+    from collections.abc import Mapping  # python3
+except:
+    from collections import Mapping  # python2
 
 from tds_client.service.ncss import NetCDFSubsetService
 from tds_client.service.opendap import OPeNDAPService
