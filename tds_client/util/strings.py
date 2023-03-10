@@ -1,8 +1,11 @@
 
 import unicodedata
 
-from numpy import unicode
-
+try:
+    from numpy import unicode
+except ImportError:
+    # latter numpy stores unicode in the compat namespace.
+    from numpy.compat import unicode
 
 def normalise(val):
     if val is not None:
