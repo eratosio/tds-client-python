@@ -4,9 +4,10 @@ from pkg_resources import iter_entry_points
 
 try:
     from collections.abc import Mapping  # python3
-except:
+except ImportError:
     from collections import Mapping  # python2
 
+from tds_client.service.httpserver import HttpServerService
 from tds_client.service.ncss import NetCDFSubsetService
 from tds_client.service.opendap import OPeNDAPService
 from tds_client.util.strings import normalise
@@ -38,5 +39,6 @@ class ServiceManager(Mapping):
 
 
 SERVICE_CLASSES = ServiceManager()
+SERVICE_CLASSES.register_class(HttpServerService)
 SERVICE_CLASSES.register_class(NetCDFSubsetService)
 SERVICE_CLASSES.register_class(OPeNDAPService)
