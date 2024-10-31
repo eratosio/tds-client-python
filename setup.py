@@ -24,6 +24,7 @@ setup(
     install_requires = [
         'requests',
         'pydap',
+        'pydap[server]',
         'netCDF4'
     ],
     classifiers = [
