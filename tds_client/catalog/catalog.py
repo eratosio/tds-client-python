@@ -3,7 +3,10 @@ from tds_client.catalog.common import CatalogEntity
 from tds_client.dataset import Dataset
 from tds_client.util import urls, xml
 
-from xml.etree import cElementTree as ElementTree
+try:
+    from xml.etree import cElementTree as ElementTree # older python versions
+except ImportError:
+    import xml.etree.ElementTree as ElementTree
 from requests.structures import CaseInsensitiveDict
 
 # Rules to apply when merging URLs resulting from redirects.
