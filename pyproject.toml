@@ -34,3 +34,6 @@ Homepage = "https://bitbucket.csiro.au/projects/SC/repos/tds-client-python/brows
 path = "tds_client/version.py"
 
 [tool.hatch.metadata.hooks]
+
+[tool.hatch.build.targets.wheel]
+packages = ["tds_client"]
