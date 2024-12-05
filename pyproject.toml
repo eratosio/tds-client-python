@@ -4,11 +4,12 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "senaps-tds"
+name = "eratos-tds"
 dynamic = ["version"]
 description = "Thredds Data Server (TDS) Client"
 readme = "readme.md"
 authors = [{ name = "Mac Coombe", email = "mac.coombe@csiro.au" }]
+maintainers = [{ name = "Eratos", email = "support@eratos.com" }]
 keywords = ["Thredds"]
 classifiers = [
   "Development Status :: 3 - Alpha",
