@@ -1,7 +1,3 @@
-
-
-from pkg_resources import iter_entry_points
-
 try:
     from collections.abc import Mapping  # python3
 except ImportError:
@@ -32,10 +28,6 @@ class ServiceManager(Mapping):
 
         for alias in cls.get_all_aliases():
             self._service_lookup[normalise(alias)] = cls
-
-    def load_plugins(self):
-        for entry_point in iter_entry_points(group='tds_client.service'):
-            self.register_service_class(entry_point.load())
 
 
 SERVICE_CLASSES = ServiceManager()
