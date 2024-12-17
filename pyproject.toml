@@ -9,12 +9,14 @@ dynamic = ["version"]
 description = "Thredds Data Server (TDS) Client"
 readme = "readme.md"
 authors = [{ name = "Mac Coombe", email = "mac.coombe@csiro.au" }]
+license = { text = "MIT License" }
 maintainers = [{ name = "Eratos", email = "support@eratos.com" }]
 keywords = ["Thredds"]
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Topic :: Scientific/Engineering :: Information Analysis",
   "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
   "Natural Language :: English",
   "Operating System :: POSIX",
   "Programming Language :: Python :: 3.7",
